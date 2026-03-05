@@ -9,6 +9,13 @@ import "dotenv/config";
 const app = express();
 app.set("trust proxy", 1);
 
+import express from "express";
+const app = express();
+
+app.set("trust proxy", 1);               // ✅ важно для Render + rate-limit
+app.use(express.json());                 // ✅ на всякий случай
+app.use(express.urlencoded({ extended: true })); // ✅ на всякий случай
+
 // === CONFIG ===
 const PORT = process.env.PORT || 3001;
 const BOT_TOKEN = process.env.TG_BOT_TOKEN;
@@ -98,12 +105,12 @@ async function tgSendDocument(fileBuffer, filename, caption) {
 // API endpoint
 app.post("/api/apply", upload.single("files"), async (req, res) => {
   try {
-    const { email, fio, phone, workname, nomination } = req.body;
+    const { email, fio, phone, workname, nomination } = req.body || {};
     const file = req.file;
 
     // basic validation
-    if (!email || !fio || !phone || !workname || !nomination || !file) {
-      return res.status(400).json({ ok:false, error:"missing_fields" });
+    if (!email || !fio || !phone || !workname || !nomination) {
+      return res.status(400).json({ ok: false, error: "missing_fields" });
     }
 
     const msg =
