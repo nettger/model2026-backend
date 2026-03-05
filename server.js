@@ -3,13 +3,14 @@ import express from "express";
 import cors from "cors";
 import multer from "multer";
 import fetch from "node-fetch";
-import rateLimit from "express-rate-limit";
 import "dotenv/config";
 
 const app = express();
 app.set("trust proxy", 1);               // ✅ важно для Render + rate-limit
 app.use(express.json());                 // ✅ на всякий случай
 app.use(express.urlencoded({ extended: true })); // ✅ на всякий случай
+
+import rateLimit from "express-rate-limit";
 
 // === CONFIG ===
 const PORT = process.env.PORT || 3001;
