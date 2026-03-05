@@ -26,6 +26,11 @@ app.use(
   })
 );
 
+app.use((req, res, next) => {
+  console.log("REQ:", req.method, req.url, req.headers["content-type"] || "");
+  next();
+});
+
 // лимитер от спама
 app.use(
   "/api/apply",
@@ -105,11 +110,6 @@ async function tgSendDocument(fileBuffer, filename, caption) {
   const json = await res.json();
   if (!json.ok) throw new Error(`TG sendDocument failed: ${JSON.stringify(json)}`);
 }
-
-app.use((req, res, next) => {
-  console.log("REQ:", req.method, req.url, req.headers["content-type"] || "");
-  next();
-});
 
 // API endpoint
 app.post("/api/apply", upload.single("files"), async (req, res) => {
