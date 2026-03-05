@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import "dotenv/config";
 
 const app = express();
+app.set("trust proxy", 1);
 
 // === CONFIG ===
 const PORT = process.env.PORT || 3001;
