@@ -1,0 +1,23 @@
+# Secrets
+.env
+.env.*
+*.env
+
+# Node / servers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local / OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Build (если появится)
+dist/
+build/
