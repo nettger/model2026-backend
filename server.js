@@ -2,39 +2,40 @@
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import fetch from "node-fetch";
+import rateLimit from "express-rate-limit";
 import "dotenv/config";
 
 const app = express();
-app.set("trust proxy", 1);               // ✅ важно для Render + rate-limit
-app.use(express.json());                 // ✅ на всякий случай
-app.use(express.urlencoded({ extended: true })); // ✅ на всякий случай
 
-import rateLimit from "express-rate-limit";
+// ✅ важно для Render/прокси (и для express-rate-limit)
+app.set("trust proxy", 1);
+
+// ✅ парсеры (multipart всё равно парсит multer, но пусть будут)
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // === CONFIG ===
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 10000; // Render сам задаёт PORT
 const BOT_TOKEN = process.env.TG_BOT_TOKEN;
 const CHAT_ID = process.env.TG_CHAT_ID;
 
-// fail fast
-if (!BOT_TOKEN || !CHAT_ID) {
-  console.error("❌ Не заданы TG_BOT_TOKEN или TG_CHAT_ID в .env");
-  process.exit(1);
-}
-
-// CORS — разреши домен сайта (или оставь * на тест)
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || "*",
-}));
+// CORS — лучше явно указать nettger origin, но на тест можно *
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "*",
+  })
+);
 
 // лимитер от спама
-app.use("/api/apply", rateLimit({
-  windowMs: 60 * 1000,
-  max: 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-}));
+app.use(
+  "/api/apply",
+  rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
 
 // multipart upload (файл в памяти)
 const upload = multer({
@@ -53,14 +54,14 @@ const upload = multer({
 
     if (!ok) return cb(new Error("Недопустимый тип файла"));
     cb(null, true);
-  }
+  },
 });
 
 function escapeHtml(s = "") {
   return String(s)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;");
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function fmtDate() {
@@ -68,25 +69,32 @@ function fmtDate() {
   return d.toLocaleString("ru-RU", { timeZone: "Europe/Berlin" });
 }
 
-// Telegram helpers
+// Telegram helpers (используем встроенный fetch Node 22)
 async function tgSendMessage(text) {
+  if (!BOT_TOKEN || !CHAT_ID) throw new Error("Missing TG_BOT_TOKEN or TG_CHAT_ID");
+
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type":"application/json" },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: CHAT_ID,
       text,
       parse_mode: "HTML",
       disable_web_page_preview: true,
-    })
+    }),
   });
+
   const json = await res.json();
   if (!json.ok) throw new Error(`TG sendMessage failed: ${JSON.stringify(json)}`);
 }
 
 async function tgSendDocument(fileBuffer, filename, caption) {
+  if (!BOT_TOKEN || !CHAT_ID) throw new Error("Missing TG_BOT_TOKEN or TG_CHAT_ID");
+
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendDocument`;
+
+  // Node 22: FormData/Blob есть глобально
   const fd = new FormData();
   fd.append("chat_id", CHAT_ID);
   fd.append("caption", caption || "");
@@ -105,7 +113,7 @@ app.post("/api/apply", upload.single("files"), async (req, res) => {
     const file = req.file;
 
     // basic validation
-    if (!email || !fio || !phone || !workname || !nomination) {
+    if (!email || !fio || !phone || !workname || !nomination || !file) {
       return res.status(400).json({ ok: false, error: "missing_fields" });
     }
 
@@ -117,26 +125,19 @@ app.post("/api/apply", upload.single("files"), async (req, res) => {
       `<b>Телефон:</b> ${escapeHtml(phone)}\n` +
       `<b>Номинация:</b> ${escapeHtml(nomination)}\n\n` +
       `<b>Название работы:</b>\n${escapeHtml(workname)}\n\n` +
-      `<b>Файл:</b> ${escapeHtml(file.originalname)} (${Math.round(file.size/1024)} KB)`;
+      `<b>Файл:</b> ${escapeHtml(file.originalname)} (${Math.round(file.size / 1024)} KB)`;
 
-    // 1) сообщение
     await tgSendMessage(msg);
+    await tgSendDocument(file.buffer, file.originalname, `📎 Материалы: <b>${escapeHtml(fio)}</b>`);
 
-    // 2) документ
-    await tgSendDocument(
-      file.buffer,
-      file.originalname,
-      `📎 Материалы: <b>${escapeHtml(fio)}</b>`
-    );
-
-    res.json({ ok:true });
+    return res.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok:false, error:"server_error" });
+    console.error("apply error:", e);
+    return res.status(500).json({ ok: false, error: "server_error" });
   }
 });
 
-app.get("/health", (req,res)=>res.send("ok"));
+app.get("/health", (req, res) => res.send("ok"));
 
 app.listen(PORT, () => {
   console.log(`✅ Server running on http://localhost:${PORT}`);
